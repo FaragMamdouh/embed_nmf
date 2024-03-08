@@ -31,3 +31,51 @@ embed_nmf <- function(counts, dimensions, verbose = TRUE) {
   
   return(nmf_projections)
 }
+
+#' embed kodama
+#' 
+#' embed in grey scale using kodama embeddings 
+#' @param counts Seurat object containing normalised counts
+#' @param dimensions number dimension to retain from kodama
+#' @param landmarks number of landmarks to use
+#' @param verbose logical if progress messages should be outputed
+#' @return normalised kodama embedding matrix 
+#' @importFrom KODAMA KODAMA.matrix
+#' @importFrom umap umap.knn
+#' @importFrom umap umap
+embed_kodama <- function(counts, dimensions, landmarks , verbose = TRUE) {
+  #--------------------------------------------------------------------------#
+  # Get the normalized count matrix and matrix with variable features from the Seurat object
+  #--------------------------------------------------------------------------#
+  vesalius:::message_switch("kodama_tensor", dimensions , verbose)
+  count_matrix <- as.matrix(Seurat::GetAssayData(counts, slot = "data"))
+  features <- counts@assays[["RNA"]]@var.features
+  count_matrix <- t(count_matrix[features, ])
+  #--------------------------------------------------------------------------#
+  # Run KODAMA
+  #--------------------------------------------------------------------------#
+  KODAMA_MATRIX= KODAMA::KODAMA.matrix(count_matrix,  f.par = 50, landmarks = landmarks)
+  #--------------------------------------------------------------------------#
+  # Find KNN graph using precomputed indices and distances
+  #--------------------------------------------------------------------------#
+  u = umap::umap.knn(KODAMA_MATRIX$knn_Armadillo$nn_index, KODAMA_MATRIX$knn_Armadillo$distances)
+  #--------------------------------------------------------------------------#
+  # Set UMAP parameters and Run UMAP
+  #--------------------------------------------------------------------------#
+  custom.settings = umap::umap.defaults
+  custom.settings$n_components= dimensions
+  custom.settings$knn = u
+  KODAMA_VISUALIZATION = umap::umap(KODAMA_MATRIX$data,config= custom.settings )$layout
+  KODAMA_MATRIX[["data"]]= NULL
+  row.names(KODAMA_VISUALIZATION)= row.names(KODAMA_MATRIX[["data"]])
+  
+  #--------------------------------------------------------------------------#
+  # Data Normalization
+  #--------------------------------------------------------------------------#
+  KODAMA_VISUALIZATION <- apply(KODAMA_VISUALIZATION, 2, vesalius:::norm_pixel, "minmax")
+  KODAMA_VISUALIZATION <- list(as.matrix(KODAMA_VISUALIZATION))
+  names(KODAMA_VISUALIZATION) <- "KODAMA"
+  return(KODAMA_VISUALIZATION)
+}
+
+
